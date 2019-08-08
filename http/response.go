@@ -7,18 +7,26 @@ import (
 
 // Response is an HTTP response.
 type Response struct {
+	// StatusCode is the status of the response.
 	StatusCode int
 
+	// StatusText is the status text of the response.
 	StatusText string
 
+	// Proto is the HTTP protocol version.
 	Proto string
 
+	// Header contains the response headers.
 	Header Header
 
+	// Body is the response body.
 	Body io.Reader
 
+	// Close indicates that the response want to close the connection.
 	Close bool
 
+	// Error is the error associated with the response. This is only
+	// set internally.
 	Error error
 }
 

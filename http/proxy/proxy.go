@@ -81,13 +81,15 @@ func New(addr string, secure bool) (*ReverseProxy, error) {
 func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Response {
 	conn, err := p.dialer(ctx, "tcp", p.addr)
 	if err != nil {
-		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway"}
+		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
 
 	// TODO: TLS
 
+	p.modifyHeaders(r)
+
 	if err := r.Write(conn); err != nil {
-		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway"}
+		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
 
 	bufr := newBufioReader(conn)
@@ -95,7 +97,7 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 
 	resp, err := p.readResponse(bufr)
 	if err != nil {
-		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway"}
+		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
 	return resp
 }
@@ -186,4 +188,15 @@ func (p *ReverseProxy) parseContentLength(r *http.Response) (int64, error) {
 	}
 
 	return 0, nil
+}
+
+func (p *ReverseProxy) modifyHeaders(r *http.Request) {
+	r.Header.Del("Connection")
+
+	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			ip = xff + ", " + ip
+		}
+		r.Header.Set("X-Forward-For", ip)
+	}
 }

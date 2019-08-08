@@ -14,6 +14,9 @@ type Request struct {
 	// URL is the request URL.
 	URL *url.URL
 
+	// Host is the request host.
+	Host string
+
 	// Proto is the HTTP protocol version.
 	Proto string
 
@@ -25,6 +28,12 @@ type Request struct {
 
 	// RequestURI is the request URI.
 	RequestURI string
+
+	// RemoteAddr is the remote address of the request.
+	RemoteAddr string
+
+	// Close indicates that the request wants to close the connection.
+	Close bool
 }
 
 // Write writes the request to a writer.

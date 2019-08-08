@@ -2,9 +2,11 @@ package http
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"io/ioutil"
 	"net/textproto"
 	"net/url"
 	"strconv"
@@ -73,6 +75,7 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 		conn.Close()
 		return
 	}
+	req.RemoteAddr = conn.RemoteAddr()
 
 	resp := t.handler.ServeHTTP(ctx, req)
 
@@ -80,7 +83,7 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 		conn.Close()
 	}
 
-	if resp.Close || strings.ToLower(req.Header.Get("Connection")) == "close" {
+	if resp.Close || req.Close {
 		conn.Close()
 	}
 }
@@ -114,6 +117,13 @@ func (t *Transfer) readRequest(r *bufio.Reader) (*Request, error) {
 	}
 	req.Header = Header(header)
 
+	req.Host = req.Header.Get("Host")
+	if req.Host == "" {
+		req.Host = req.URL.Host
+	}
+
+	req.Close = strings.ToLower(req.Header.Get("Connection")) == "close"
+
 	n, err := t.parseContentLength(req)
 	if err != nil {
 		return nil, err
@@ -121,7 +131,12 @@ func (t *Transfer) readRequest(r *bufio.Reader) (*Request, error) {
 
 	// Body
 	if n > 0 {
-		req.Body = io.LimitReader(r, n)
+		b, err := ioutil.ReadAll(io.LimitReader(r, n))
+		if err != nil {
+			return nil, err
+		}
+
+		req.Body = bytes.NewReader(b)
 	}
 
 	return req, nil
