@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/hamba/cmd"
 	"github.com/hamba/pkg/log"
 	"github.com/nrwiersma/proxy/http"
+	"github.com/nrwiersma/proxy/http/proxy"
+	"github.com/nrwiersma/proxy/middleware"
 	"github.com/nrwiersma/proxy/tcp/server"
 	"gopkg.in/urfave/cli.v2"
 )
@@ -45,19 +46,21 @@ func runServer(c *cli.Context) error {
 }
 
 func newServer(ctx *cmd.Context) (*server.Server, error) {
-	h := http.HandlerFunc(func(ctx context.Context, w io.WriteCloser, req *http.Request) {
-		fmt.Printf("%#v\n", req)
-		fmt.Printf("%#v\n", req.URL)
-		w.Write([]byte("HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Request"))
-		w.Close()
-	})
+	var h http.Handler
+	var err error
+
+	h, err = proxy.New("httpbin.org:80", false)
+	if err != nil {
+		return nil, err
+	}
+	h = middleware.NewLogger(h, ctx)
 
 	th := http.NewTransfer(h)
 
 	return server.New(th, server.Opts{
-		ReadTimeout:  0,
-		WriteTimeout: 0,
-		IdleTimeout:  0,
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+		IdleTimeout:  time.Second,
 		ErrorLog:     nil,
 	})
 }

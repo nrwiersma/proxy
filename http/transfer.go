@@ -70,12 +70,17 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 		const errResp string = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Request"
 
 		conn.Write([]byte(errResp))
+		conn.Close()
 		return
 	}
 
 	resp := t.handler.ServeHTTP(ctx, req)
 
 	if err := resp.Write(conn); err != nil {
+		conn.Close()
+	}
+
+	if resp.Close || strings.ToLower(req.Header.Get("Connection")) == "close" {
 		conn.Close()
 	}
 }
@@ -124,7 +129,7 @@ func (t *Transfer) readRequest(r *bufio.Reader) (*Request, error) {
 
 // parseRequestLine parses the request line like "GET /test HTTP/1.1".
 func (t *Transfer) parseRequestLine(s string) (string, string, string, error) {
-	parts := strings.SplitN(s, " ", 3)
+	parts := strings.SplitN(s, " ", 3) // method uri proto
 	if len(parts) != 3 {
 		return "", "", "", errors.New("http: invalid request")
 	}

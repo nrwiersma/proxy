@@ -1,14 +1,10 @@
 package http
 
 import (
+	"fmt"
 	"io"
 	"net/url"
 )
-
-// Header are HTTP headers.
-type Header map[string][]string
-
-//TODO: flesh our header a bit
 
 // Request is an HTTP request.
 type Request struct {
@@ -33,5 +29,29 @@ type Request struct {
 
 // Write writes the request to a writer.
 func (r *Request) Write(w io.Writer) error {
+	uri := r.URL.RequestURI()
+
+	// Request Line
+	_, err := fmt.Fprintf(w, "%s %s %s\r\n", r.Method, uri, r.Proto)
+	if err != nil {
+		return err
+	}
+
+	// Header
+	if err := r.Header.Write(w); err != nil {
+		return err
+	}
+	_, err = io.WriteString(w, "\r\n")
+	if err != nil {
+		return err
+	}
+
+	// Body
+	if r.Body != nil {
+		if _, err := io.Copy(w, r.Body); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
