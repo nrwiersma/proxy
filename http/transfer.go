@@ -78,6 +78,9 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 	req.RemoteAddr = conn.RemoteAddr()
 
 	resp := t.handler.ServeHTTP(ctx, req)
+	if resp == nil {
+		return
+	}
 
 	if err := resp.Write(conn); err != nil {
 		conn.Close()
@@ -103,6 +106,9 @@ func (t *Transfer) readRequest(r *bufio.Reader) (*Request, error) {
 	req.Method, req.RequestURI, req.Proto, err = t.parseRequestLine(s)
 	if err != nil {
 		return nil, err
+	}
+	if !t.validMethod(req.Method) {
+		return nil, errors.New("http: invalid method")
 	}
 
 	req.URL, err = url.ParseRequestURI(req.RequestURI)
@@ -150,6 +156,16 @@ func (t *Transfer) parseRequestLine(s string) (string, string, string, error) {
 	}
 
 	return parts[0], parts[1], parts[2], nil
+}
+
+func (t *Transfer) validMethod(method string) bool {
+	switch method {
+	case "GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE":
+		return true
+
+	default:
+		return false
+	}
 }
 
 func (t *Transfer) parseContentLength(r *Request) (int64, error) {

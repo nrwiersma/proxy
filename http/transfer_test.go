@@ -108,6 +108,39 @@ func TestTransfer_ServeTCPBadRequest(t *testing.T) {
 	assert.Equal(t, resp, buf.String())
 }
 
+func TestTransfer_ServeTCPBadMethod(t *testing.T) {
+	req := "TEST /blah?foo=bar#frag HTTP/1.1\r\nContent-Length: 4\r\nHost: example.com\r\n\r\ntest"
+	buf := bytes.NewBuffer(nil)
+
+	conn := new(MockConn)
+	conn.On("Read", mock.Anything).Run(func(args mock.Arguments) {
+		p := args.Get(0).([]byte)
+		for i, r := range req {
+			p[i] = byte(r)
+		}
+	}).Return(len(req), nil)
+	call := conn.On("Write", mock.Anything)
+	call.Run(func(args mock.Arguments) {
+		p := args.Get(0).([]byte)
+		buf.Write(p)
+		call.Return(len(p), nil)
+	})
+	conn.On("Close").Return(nil)
+
+	h := http.HandlerFunc(func(ctx context.Context, r *http.Request) *http.Response {
+		return &http.Response{}
+	})
+
+	trans := http.NewTransfer(h)
+
+	trans.ServeTCP(context.Background(), conn)
+
+	conn.AssertExpectations(t)
+
+	resp := "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Request"
+	assert.Equal(t, resp, buf.String())
+}
+
 type MockConn struct {
 	mock.Mock
 }
