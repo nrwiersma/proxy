@@ -61,12 +61,14 @@ func putTextprotoReader(r *textproto.Reader) {
 	textprotoReaderPool.Put(r)
 }
 
+// ReverseProxy is a proxy handler.
 type ReverseProxy struct {
 	addr    string
 	dialer  func(ctx context.Context, network, addr string) (net.Conn, error)
 	tlsConf *tls.Config
 }
 
+// New returns a new reverse proxy.
 func New(addr string) (*ReverseProxy, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -85,6 +87,7 @@ func New(addr string) (*ReverseProxy, error) {
 	}, nil
 }
 
+// NewTLS returns a new reverse proxy with TLS support.
 func NewTLS(addr, certFile, keyFile string) (*ReverseProxy, error) {
 	config := &tls.Config{}
 	if certFile != "" && keyFile != "" {
@@ -116,6 +119,7 @@ func NewTLS(addr, certFile, keyFile string) (*ReverseProxy, error) {
 	}, nil
 }
 
+// ServeHTTP serves an HTTP request.
 func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Response {
 	conn, err := p.dialer(ctx, "tcp", p.addr)
 	if err != nil {

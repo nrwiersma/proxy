@@ -9,11 +9,13 @@ import (
 	"github.com/nrwiersma/proxy/http"
 )
 
+// Stats collects statistics about the request.
 type Stats struct {
 	h     http.Handler
 	stats stats.Statter
 }
 
+// NewStats returns a stats middleware.
 func NewStats(h http.Handler, s stats.Statter) *Stats {
 	return &Stats{
 		h:     h,
@@ -21,6 +23,7 @@ func NewStats(h http.Handler, s stats.Statter) *Stats {
 	}
 }
 
+// ServeHTTP serves an HTTP request.
 func (s *Stats) ServeHTTP(ctx context.Context, r *http.Request) *http.Response {
 	start := mono.Now()
 	resp := s.h.ServeHTTP(ctx, r)
