@@ -12,10 +12,10 @@ type Logger struct {
 	log log.Logger
 }
 
-func NewLogger(h http.Handler, lgbl log.Loggable) *Logger {
+func NewLogger(h http.Handler, l log.Logger) *Logger {
 	return &Logger{
 		h:   h,
-		log: lgbl.Logger(),
+		log: l,
 	}
 }
 

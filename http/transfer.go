@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hamba/pkg/log"
 	"github.com/nrwiersma/proxy/tcp/server"
 )
 
@@ -53,12 +54,14 @@ func putTextprotoReader(r *textproto.Reader) {
 // Transfer is an HTTP transfer TCP handler.
 type Transfer struct {
 	handler Handler
+	log     log.Logger
 }
 
 // NewTransfer returns a TCP to HTTP transfer handler.
-func NewTransfer(h Handler) *Transfer {
+func NewTransfer(h Handler, l log.Logger) *Transfer {
 	return &Transfer{
 		handler: h,
+		log:     l,
 	}
 }
 
@@ -69,6 +72,8 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 
 	req, err := t.readRequest(bufr)
 	if err != nil {
+		t.log.Error("error reading request", "error", err)
+
 		const errResp string = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Request"
 
 		conn.Write([]byte(errResp))
@@ -83,7 +88,10 @@ func (t *Transfer) ServeTCP(ctx context.Context, conn server.Conn) {
 	}
 
 	if err := resp.Write(conn); err != nil {
+		t.log.Error("error writing response", "error", err)
+
 		conn.Close()
+		return
 	}
 
 	if resp.Close || req.Close {

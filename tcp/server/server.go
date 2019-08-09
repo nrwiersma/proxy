@@ -3,6 +3,7 @@ package server
 import (
 	"bufio"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -57,7 +58,8 @@ type conn struct {
 
 	handler Handler
 
-	rwc net.Conn
+	rwc      net.Conn
+	tlsState *tls.ConnectionState
 
 	bufr *bufio.Reader
 
@@ -108,7 +110,20 @@ func (c *conn) serve(ctx context.Context) {
 		c.close()
 	}()
 
-	// TODO: TLS
+	if tlsConn, ok := c.rwc.(*tls.Conn); ok {
+		if d := c.server.readTimeout; d != 0 {
+			_ = c.rwc.SetReadDeadline(time.Now().Add(d))
+		}
+		if d := c.server.writeTimeout; d != 0 {
+			_ = c.rwc.SetWriteDeadline(time.Now().Add(d))
+		}
+		if err := tlsConn.Handshake(); err != nil {
+			c.server.logf("tcp: tls handshake error %v: %v", c.rwc.RemoteAddr(), err)
+			return
+		}
+		c.tlsState = &tls.ConnectionState{}
+		*c.tlsState = tlsConn.ConnectionState()
+	}
 
 	ctx, cancelCtx := context.WithCancel(ctx)
 	defer cancelCtx()
@@ -339,6 +354,26 @@ func (s *Server) ListenAndServe(addr string) error {
 	}
 
 	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	return s.Serve(ln)
+}
+
+// ListenAndServeTLS listens to the given address with TLS and calls Serve.
+func (s *Server) ListenAndServeTLS(addr, certFile, keyFile string) error {
+	if s.inShutdown.isSet() {
+		return ErrServerClosed
+	}
+
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}}
+
+	ln, err := tls.Listen("tcp", addr, config)
 	if err != nil {
 		return err
 	}

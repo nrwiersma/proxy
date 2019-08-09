@@ -49,17 +49,19 @@ func newServer(ctx *cmd.Context) (*server.Server, error) {
 	var h http.Handler
 	var err error
 
-	h, err = proxy.New("httpbin.org:80", false)
+	h, err = proxy.New("httpbin.org:80")
+	//h, err = proxy.NewTLS("httpbin.org:443", "", "")
 	if err != nil {
 		return nil, err
 	}
-	h = middleware.NewLogger(h, ctx)
+	h = middleware.NewStats(h, ctx.Statter())
+	h = middleware.NewLogger(h, ctx.Logger())
 
-	th := http.NewTransfer(h)
+	th := http.NewTransfer(h, ctx.Logger())
 
 	return server.New(th, server.Opts{
-		ReadTimeout:  time.Second,
-		WriteTimeout: time.Second,
+		ReadTimeout:  0,
+		WriteTimeout: 0,
 		IdleTimeout:  time.Second,
 		ErrorLog:     nil,
 	})

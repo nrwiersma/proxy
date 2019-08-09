@@ -63,12 +63,11 @@ func putTextprotoReader(r *textproto.Reader) {
 
 type ReverseProxy struct {
 	addr    string
-	secure  bool
 	dialer  func(ctx context.Context, network, addr string) (net.Conn, error)
 	tlsConf *tls.Config
 }
 
-func New(addr string, secure bool) (*ReverseProxy, error) {
+func New(addr string) (*ReverseProxy, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -82,8 +81,38 @@ func New(addr string, secure bool) (*ReverseProxy, error) {
 
 	return &ReverseProxy{
 		addr:   tcpAddr.String(),
-		secure: secure,
 		dialer: dialer,
+	}, nil
+}
+
+func NewTLS(addr, certFile, keyFile string) (*ReverseProxy, error) {
+	config := &tls.Config{}
+	if certFile != "" && keyFile != "" {
+		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, err
+		}
+		config.Certificates = []tls.Certificate{cert}
+	}
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		config.ServerName = host
+	}
+
+	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+
+	// This should actually be a connection pool
+	dialer := (&net.Dialer{
+		Timeout:   1 * time.Second,
+		KeepAlive: 3 * time.Second,
+	}).DialContext
+
+	return &ReverseProxy{
+		addr:    tcpAddr.String(),
+		dialer:  dialer,
+		tlsConf: config,
 	}, nil
 }
 
@@ -93,7 +122,14 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
 
-	// TODO: TLS
+	// TLS
+	if p.tlsConf != nil {
+		tlsConn := tls.Client(conn, p.tlsConf)
+		if err = tlsConn.Handshake(); err != nil {
+			return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
+		}
+		conn = tlsConn
+	}
 
 	reqUp := r.Header.Get("Upgrade")
 
@@ -119,14 +155,14 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 	}
 
 	// Handle connection upgrade
-	if resp.StatusCode == 101 {
-		// TODO: Handle connection upgrade
-
-		return nil
-	}
+	//if resp.StatusCode == 101 {
+	//	// TODO: Handle connection upgrade
+	//
+	//	return nil
+	//}
 
 	p.removeConnectionHeaders(resp.Header)
-	p.removeHopByHopHeaders(r.Header)
+	p.removeHopByHopHeaders(resp.Header)
 
 	return resp
 }

@@ -2,6 +2,7 @@ package server_test
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"io/ioutil"
 	"net"
@@ -30,6 +31,33 @@ func newTestServer(t testing.TB, h server.Handler, opts server.Opts) (net.Addr, 
 	}()
 
 	return ln.Addr(), srv
+}
+
+func newTestTLSServer(t testing.TB, h server.Handler, opts server.Opts) (net.Addr, *tls.Config, *server.Server) {
+	cert, err := tls.LoadX509KeyPair("../../testdata/cert.pem", "../../testdata/key.pem")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := &tls.Config{Certificates: []tls.Certificate{cert}, InsecureSkipVerify: true}
+
+	ln, err := tls.Listen("tcp", "localhost:0", config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv, err := server.New(h, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go func() {
+		err = srv.Serve(ln)
+		if err != nil && err != server.ErrServerClosed {
+			t.Fatal(err)
+		}
+	}()
+
+	return ln.Addr(), config, srv
 }
 
 func TestNewServer_ErrorsOnNilHandler(t *testing.T) {
@@ -82,6 +110,32 @@ func TestServer_ServesConnectionStaysOpen(t *testing.T) {
 	defer srv.Close()
 
 	conn, err := net.Dial("tcp", addr.String())
+	if err != nil {
+		t.Fatal("dial error", err)
+	}
+	defer conn.Close()
+
+	for i := 0; i < 3; i++ {
+		if _, err := io.WriteString(conn, "ping"); err != nil {
+			t.Fatal("write error", err)
+		}
+
+		var pong [4]byte
+		if _, err := conn.Read(pong[:]); err != nil || string(pong[:]) != "pong" {
+			t.Fatal("read error", err)
+		}
+	}
+}
+
+func TestServer_ServesTLS(t *testing.T) {
+	addr, tlsConfig, srv := newTestTLSServer(t, pingHandler{}, server.Opts{
+		ReadTimeout:  time.Second,
+		WriteTimeout: time.Second,
+		IdleTimeout:  time.Second,
+	})
+	defer srv.Close()
+
+	conn, err := tls.Dial("tcp", addr.String(), tlsConfig)
 	if err != nil {
 		t.Fatal("dial error", err)
 	}
