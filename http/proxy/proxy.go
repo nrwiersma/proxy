@@ -18,6 +18,15 @@ import (
 	"github.com/nrwiersma/proxy/http"
 )
 
+var hopByHopHeaders = []string{
+	"Connection",
+	"Keep-Alive",
+	"Public",
+	"Proxy-Authenticate",
+	"Transfer-Encoding",
+	"Upgrade",
+}
+
 var bufioReaderPool sync.Pool
 
 func newBufioReader(r io.Reader) *bufio.Reader {
@@ -86,7 +95,16 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 
 	// TODO: TLS
 
-	p.modifyHeaders(r)
+	reqUp := r.Header.Get("Upgrade")
+
+	p.removeConnectionHeaders(r.Header)
+	p.removeHopByHopHeaders(r.Header)
+	p.addForwardedHeader(r)
+
+	if reqUp != "" {
+		r.Header.Set("Connection", "Upgrade")
+		r.Header.Set("Upgrade", reqUp)
+	}
 
 	if err := r.Write(conn); err != nil {
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
@@ -99,6 +117,17 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 	if err != nil {
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
+
+	// Handle connection upgrade
+	if resp.StatusCode == 101 {
+		// TODO: Handle connection upgrade
+
+		return nil
+	}
+
+	p.removeConnectionHeaders(resp.Header)
+	p.removeHopByHopHeaders(r.Header)
+
 	return resp
 }
 
@@ -190,9 +219,24 @@ func (p *ReverseProxy) parseContentLength(r *http.Response) (int64, error) {
 	return 0, nil
 }
 
-func (p *ReverseProxy) modifyHeaders(r *http.Request) {
-	r.Header.Del("Connection")
+func (p *ReverseProxy) removeConnectionHeaders(h http.Header) {
+	if c := h.Get("Connection"); c != "" {
+		for _, name := range strings.Split(c, ",") {
+			if name = strings.TrimSpace(name); name == "" {
+				continue
+			}
+			h.Del(name)
+		}
+	}
+}
 
+func (p *ReverseProxy) removeHopByHopHeaders(h http.Header) {
+	for _, name := range hopByHopHeaders {
+		h.Del(name)
+	}
+}
+
+func (p *ReverseProxy) addForwardedHeader(r *http.Request) {
 	if ip, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
 		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 			ip = xff + ", " + ip
