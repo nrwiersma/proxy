@@ -53,6 +53,12 @@ func newServer(ctx *cmd.Context) (*http.Server, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	h = middleware.NewCache(h, middleware.CacheOpts{
+		Expiry:        time.Minute,
+		Purge:         5 * time.Minute,
+		IgnoreHeaders: true,
+	})
 	h = middleware.NewStats(h, ctx.Statter())
 	h = middleware.NewLogger(h, ctx.Logger())
 

@@ -13,7 +13,7 @@ type Logger struct {
 	log log.Logger
 }
 
-// NewLogger returns a logger middlware.
+// NewLogger returns a logger middleware.
 func NewLogger(h http.Handler, l log.Logger) *Logger {
 	return &Logger{
 		h:   h,
