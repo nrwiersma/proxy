@@ -27,7 +27,10 @@ var hopByHopHeaders = []string{
 	"Upgrade",
 }
 
-var bufioReaderPool sync.Pool
+var (
+	bufioReaderPool sync.Pool
+	bufioWriterPool sync.Pool
+)
 
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {
@@ -42,6 +45,21 @@ func newBufioReader(r io.Reader) *bufio.Reader {
 func putBufioReader(r *bufio.Reader) {
 	r.Reset(nil)
 	bufioReaderPool.Put(r)
+}
+
+func newBufioWriter(w io.Writer) *bufio.Writer {
+	if v := bufioWriterPool.Get(); v != nil {
+		br := v.(*bufio.Writer)
+		br.Reset(w)
+		return br
+	}
+
+	return bufio.NewWriter(w)
+}
+
+func putBufioWriter(w *bufio.Writer) {
+	w.Reset(nil)
+	bufioWriterPool.Put(w)
 }
 
 var textprotoReaderPool sync.Pool
@@ -68,7 +86,7 @@ type ReverseProxy struct {
 	tlsConf *tls.Config
 }
 
-// New returns a new reverse proxy.
+// NewServer returns a new reverse proxy.
 func New(addr string) (*ReverseProxy, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
@@ -125,6 +143,7 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 	if err != nil {
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
+	defer conn.Close()
 
 	// TLS
 	if p.tlsConf != nil {
@@ -134,6 +153,11 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 		}
 		conn = tlsConn
 	}
+
+	bufr := newBufioReader(conn)
+	defer putBufioReader(bufr)
+	bufw := newBufioWriter(conn)
+	defer putBufioWriter(bufw)
 
 	reqUp := r.Header.Get("Upgrade")
 
@@ -146,12 +170,12 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 		r.Header.Set("Upgrade", reqUp)
 	}
 
-	if err := r.Write(conn); err != nil {
+	if err := r.Write(bufw); err != nil {
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
-
-	bufr := newBufioReader(conn)
-	defer putBufioReader(bufr)
+	if err := bufw.Flush(); err != nil {
+		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
+	}
 
 	resp, err := p.readResponse(bufr)
 	if err != nil {

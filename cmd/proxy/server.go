@@ -10,7 +10,6 @@ import (
 	"github.com/nrwiersma/proxy/http"
 	"github.com/nrwiersma/proxy/http/proxy"
 	"github.com/nrwiersma/proxy/middleware"
-	"github.com/nrwiersma/proxy/tcp/server"
 	"gopkg.in/urfave/cli.v2"
 )
 
@@ -45,7 +44,7 @@ func runServer(c *cli.Context) error {
 	return nil
 }
 
-func newServer(ctx *cmd.Context) (*server.Server, error) {
+func newServer(ctx *cmd.Context) (*http.Server, error) {
 	var h http.Handler
 	var err error
 
@@ -57,12 +56,12 @@ func newServer(ctx *cmd.Context) (*server.Server, error) {
 	h = middleware.NewStats(h, ctx.Statter())
 	h = middleware.NewLogger(h, ctx.Logger())
 
-	th := http.NewTransfer(h, ctx.Logger())
-
-	return server.New(th, server.Opts{
+	return http.NewServer(h, http.Opts{
 		ReadTimeout:  0,
 		WriteTimeout: 0,
 		IdleTimeout:  time.Second,
-		ErrorLog:     nil,
+		ErrorLog: func(log string) {
+			ctx.Logger().Error(log)
+		},
 	})
 }

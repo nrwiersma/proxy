@@ -32,6 +32,17 @@ type Response struct {
 
 // Write writes the response the the writer.
 func (r *Response) Write(w io.Writer) error {
+	if r.Proto == "" {
+		r.Proto = "HTTP/1.1"
+	}
+
+	if len(r.Header) == 0 {
+		r.Header = Header{
+			"Content-Type": []string{"text/plain; charset=utf-8"},
+			"Connection":   []string{"close"},
+		}
+	}
+
 	// Status Line
 	_, err := fmt.Fprintf(w, "%s %d %s\r\n", r.Proto, r.StatusCode, r.StatusText)
 	if err != nil {

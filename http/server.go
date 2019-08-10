@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"bufio"
@@ -16,8 +16,31 @@ import (
 var (
 	// ErrServerClosed is returned when a connection is
 	// attempted on a closed server.
-	ErrServerClosed = errors.New("tcp: server closed")
+	ErrServerClosed = errors.New("http: server closed")
 )
+
+type atomicBool int32
+
+func (b *atomicBool) isSet() bool {
+	return atomic.LoadInt32((*int32)(b)) != 0
+}
+
+func (b *atomicBool) set() {
+	atomic.StoreInt32((*int32)(b), 1)
+}
+
+// Handler represents a handler of HTTP requests.
+type Handler interface {
+	ServeHTTP(context.Context, *Request) *Response
+}
+
+// HandlerFunc is an adapter to allow the use of functions as HTTP handlers.
+type HandlerFunc func(context.Context, *Request) *Response
+
+// ServeHTTP serves an HTTP connection.
+func (h HandlerFunc) ServeHTTP(ctx context.Context, r *Request) *Response {
+	return h(ctx, r)
+}
 
 // Conn represents a network connection.
 type Conn interface {
@@ -27,7 +50,10 @@ type Conn interface {
 	RemoteAddr() string
 }
 
-var bufioReaderPool sync.Pool
+var (
+	bufioReaderPool sync.Pool
+	bufioWriterPool sync.Pool
+)
 
 func newBufioReader(r io.Reader) *bufio.Reader {
 	if v := bufioReaderPool.Get(); v != nil {
@@ -42,6 +68,21 @@ func newBufioReader(r io.Reader) *bufio.Reader {
 func putBufioReader(r *bufio.Reader) {
 	r.Reset(nil)
 	bufioReaderPool.Put(r)
+}
+
+func newBufioWriter(w io.Writer) *bufio.Writer {
+	if v := bufioWriterPool.Get(); v != nil {
+		br := v.(*bufio.Writer)
+		br.Reset(w)
+		return br
+	}
+
+	return bufio.NewWriter(w)
+}
+
+func putBufioWriter(w *bufio.Writer) {
+	w.Reset(nil)
+	bufioWriterPool.Put(w)
 }
 
 type connState int
@@ -62,9 +103,9 @@ type conn struct {
 	tlsState *tls.ConnectionState
 
 	bufr *bufio.Reader
+	bufw *bufio.Writer
 
-	closing atomicBool
-	state   uint32
+	state uint32
 }
 
 func (c *conn) setState(state connState) {
@@ -83,27 +124,10 @@ func (c *conn) getState() connState {
 	return connState(atomic.LoadUint32(&c.state))
 }
 
-func (c *conn) Read(p []byte) (int, error) {
-	return c.bufr.Read(p)
-}
-
-func (c *conn) Write(p []byte) (int, error) {
-	return c.rwc.Write(p)
-}
-
-func (c *conn) Close() error {
-	c.closing.set()
-	return nil
-}
-
-func (c *conn) RemoteAddr() string {
-	return c.rwc.RemoteAddr().String()
-}
-
 func (c *conn) serve(ctx context.Context) {
 	defer func() {
 		if err := recover(); err != nil {
-			c.server.logf("tcp: panic serving %v: %v", c.rwc.RemoteAddr(), err)
+			c.server.logf("http: panic serving %v: %v", c.rwc.RemoteAddr(), err)
 		}
 
 		c.setState(stateClosed)
@@ -118,7 +142,7 @@ func (c *conn) serve(ctx context.Context) {
 			_ = c.rwc.SetWriteDeadline(time.Now().Add(d))
 		}
 		if err := tlsConn.Handshake(); err != nil {
-			c.server.logf("tcp: tls handshake error %v: %v", c.rwc.RemoteAddr(), err)
+			c.server.logf("http: tls handshake error %v: %v", c.rwc.RemoteAddr(), err)
 			return
 		}
 		c.tlsState = &tls.ConnectionState{}
@@ -129,22 +153,49 @@ func (c *conn) serve(ctx context.Context) {
 	defer cancelCtx()
 
 	c.bufr = newBufioReader(c.rwc)
+	defer putBufioReader(c.bufr)
+	c.bufw = newBufioWriter(c.rwc)
+	defer putBufioWriter(c.bufw)
+
 	c.handler = c.server.handler
 
 	for {
 		if d := c.server.readTimeout; d != 0 {
 			_ = c.rwc.SetReadDeadline(time.Now().Add(d))
 		}
+
+		c.setState(stateActive)
+
+		req, err := c.readRequest(ctx)
+		if err != nil {
+			c.server.logf("http: error reading request %v: %v", c.rwc.RemoteAddr(), err)
+
+			const errResp string = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n400 Bad Request"
+
+			c.rwc.Write([]byte(errResp))
+			c.rwc.Close()
+			return
+		}
+
 		if d := c.server.writeTimeout; d != 0 {
 			_ = c.rwc.SetWriteDeadline(time.Now().Add(d))
 		}
 
-		c.setState(stateActive)
-		c.handler.ServeTCP(ctx, c)
+		resp := c.handler.ServeHTTP(ctx, req)
 
-		if c.closing.isSet() {
+		if err := resp.Write(c.bufw); err != nil {
+			c.server.logf("http: error writing response  %v: %v", c.rwc.RemoteAddr(), err)
 			return
 		}
+		if err := c.bufw.Flush(); err != nil {
+			c.server.logf("http: error writing response  %v: %v", c.rwc.RemoteAddr(), err)
+			return
+		}
+
+		if resp == nil || resp.Close {
+			return
+		}
+
 		c.setState(stateIdle)
 
 		if d := c.server.idleTimeout; d != 0 {
@@ -155,6 +206,18 @@ func (c *conn) serve(ctx context.Context) {
 		}
 		_ = c.rwc.SetReadDeadline(time.Time{})
 	}
+}
+
+func (c *conn) readRequest(ctx context.Context) (*Request, error) {
+	req, err := readRequest(c.bufr)
+	if err != nil {
+		return nil, err
+	}
+
+	req.ctx = ctx
+	req.RemoteAddr = c.rwc.RemoteAddr().String()
+
+	return req, nil
 }
 
 func (c *conn) close() {
@@ -198,10 +261,10 @@ type Server struct {
 	activeConn map[*conn]struct{}
 }
 
-// New returns a Server configured with the given parameters.
-func New(h Handler, opts Opts) (*Server, error) {
+// NewServer returns a Server configured with the given parameters.
+func NewServer(h Handler, opts Opts) (*Server, error) {
 	if h == nil {
-		return nil, errors.New("tcp: Handler cannot be nil")
+		return nil, errors.New("http: Handler cannot be nil")
 	}
 
 	idleTimeout := opts.IdleTimeout
@@ -330,7 +393,7 @@ func (s *Server) Serve(ln net.Listener) error {
 			}
 
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				s.logf("tcp: Accept error: %v", err)
+				s.logf("http: Accept error: %v", err)
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
