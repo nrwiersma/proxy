@@ -11,6 +11,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hamba/pkg/log"
 )
 
 var (
@@ -240,10 +242,8 @@ type Opts struct {
 	// If IdleTimeout is zero, the value of ReadTimeout is used.
 	IdleTimeout time.Duration
 
-	// ErrorLog is an optional function that errors are written to. If
-	// nil, errors are written to stdout. Calls to the function may be
-	// concurrent.
-	ErrorLog func(string)
+	// Log is an optional logger.
+	Log log.Logger
 }
 
 // Server is a TCP server.
@@ -252,7 +252,7 @@ type Server struct {
 	readTimeout  time.Duration
 	writeTimeout time.Duration
 	idleTimeout  time.Duration
-	errLog       func(string)
+	log          log.Logger
 
 	inShutdown atomicBool
 
@@ -277,15 +277,15 @@ func NewServer(h Handler, opts Opts) (*Server, error) {
 		readTimeout:  opts.ReadTimeout,
 		writeTimeout: opts.WriteTimeout,
 		idleTimeout:  idleTimeout,
-		errLog:       opts.ErrorLog,
+		log:          opts.Log,
 		listeners:    map[*net.Listener]struct{}{},
 		activeConn:   map[*conn]struct{}{},
 	}, nil
 }
 
 func (s *Server) logf(format string, args ...interface{}) {
-	if s.errLog != nil {
-		s.errLog(fmt.Sprintf(format, args...))
+	if s.log != nil {
+		s.log.Error(fmt.Sprintf(format, args...))
 		return
 	}
 

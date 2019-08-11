@@ -84,10 +84,25 @@ type ReverseProxy struct {
 	addr    string
 	dialer  func(ctx context.Context, network, addr string) (net.Conn, error)
 	tlsConf *tls.Config
+	timeout time.Duration
+}
+
+// Opts are options to configure the proxy.
+type Opts struct {
+	DialTimeout time.Duration
+
+	Timeout time.Duration
+}
+
+func (o Opts) dialTimeout() time.Duration {
+	if o.DialTimeout != 0 {
+		return o.DialTimeout
+	}
+	return time.Second
 }
 
 // NewServer returns a new reverse proxy.
-func New(addr string) (*ReverseProxy, error) {
+func New(addr string, opts Opts) (*ReverseProxy, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {
 		return nil, err
@@ -95,8 +110,7 @@ func New(addr string) (*ReverseProxy, error) {
 
 	// This should actually be a connection pool
 	dialer := (&net.Dialer{
-		Timeout:   1 * time.Second,
-		KeepAlive: 3 * time.Second,
+		Timeout: opts.dialTimeout(),
 	}).DialContext
 
 	return &ReverseProxy{
@@ -106,7 +120,7 @@ func New(addr string) (*ReverseProxy, error) {
 }
 
 // NewTLS returns a new reverse proxy with TLS support.
-func NewTLS(addr, certFile, keyFile string) (*ReverseProxy, error) {
+func NewTLS(addr, certFile, keyFile string, opts Opts) (*ReverseProxy, error) {
 	config := &tls.Config{}
 	if certFile != "" && keyFile != "" {
 		cert, err := tls.LoadX509KeyPair(certFile, keyFile)
@@ -126,8 +140,7 @@ func NewTLS(addr, certFile, keyFile string) (*ReverseProxy, error) {
 
 	// This should actually be a connection pool
 	dialer := (&net.Dialer{
-		Timeout:   1 * time.Second,
-		KeepAlive: 3 * time.Second,
+		Timeout: opts.dialTimeout(),
 	}).DialContext
 
 	return &ReverseProxy{
@@ -154,6 +167,12 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 		conn = tlsConn
 	}
 
+	if p.timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+	}
+
 	bufr := newBufioReader(conn)
 	defer putBufioReader(bufr)
 	bufw := newBufioWriter(conn)
@@ -177,9 +196,21 @@ func (p *ReverseProxy) ServeHTTP(ctx context.Context, r *http.Request) *http.Res
 		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
 	}
 
-	resp, err := p.readResponse(bufr)
-	if err != nil {
-		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
+	var resp *http.Response
+	done := make(chan struct{})
+	go func() {
+		var err error
+		resp, err = p.readResponse(bufr)
+		if err != nil {
+			resp = &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: err}
+		}
+		close(done)
+	}()
+
+	select {
+	case <-ctx.Done():
+		return &http.Response{StatusCode: 502, StatusText: "Bad Gateway", Error: ctx.Err()}
+	case <-done:
 	}
 
 	// Handle connection upgrade
