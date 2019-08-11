@@ -256,8 +256,13 @@ func (p *ReverseProxy) readResponse(r *bufio.Reader) (*http.Response, error) {
 	}
 
 	// Body
-	if n > 0 {
-		b, err := ioutil.ReadAll(io.LimitReader(r, n))
+	if n != 0 {
+		var reader io.Reader = r
+		if n > 0 {
+			reader = io.LimitReader(r, n)
+		}
+
+		b, err := ioutil.ReadAll(reader)
 		if err != nil {
 			return nil, err
 		}
@@ -285,9 +290,6 @@ func (p *ReverseProxy) parseStatusLine(s string) (int, string, string, error) {
 
 func (p *ReverseProxy) parseContentLength(r *http.Response) (int64, error) {
 	cls := r.Header["Content-Length"]
-	if len(cls) > 1 {
-		return -1, errors.New("proxy: multiple content lengths are not allowed")
-	}
 
 	var cl string
 	if len(cls) == 1 {
@@ -311,6 +313,7 @@ func (p *ReverseProxy) parseContentLength(r *http.Response) (int64, error) {
 		return n, nil
 	}
 
+	// If there is no content length, we need to read till EOF
 	return 0, nil
 }
 

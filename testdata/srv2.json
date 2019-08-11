@@ -1,0 +1,10 @@
+[
+  {
+    "httpRequest": {
+      "path": "/test"
+    },
+    "httpResponse": {
+      "body": "Server 2"
+    }
+  }
+]

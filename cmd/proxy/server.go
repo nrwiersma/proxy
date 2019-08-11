@@ -48,15 +48,19 @@ func newServer(ctx *cmd.Context) (*http.Server, error) {
 	var h http.Handler
 	var err error
 
-	h, err = proxy.New("httpbin.org:80", proxy.Opts{Timeout: time.Second})
-	//h, err = proxy.NewTLS("httpbin.org:443", "", "", proxy.Opts{Timeout: time.Second})
+	srv1, err := proxy.New("127.0.0.1:9080", proxy.Opts{Timeout: time.Second})
 	if err != nil {
 		return nil, err
 	}
+	srv2, err := proxy.New("127.0.0.1:9081", proxy.Opts{Timeout: time.Second})
+	if err != nil {
+		return nil, err
+	}
+	h = proxy.NewRRLoadBalancer(srv1, srv2)
 
 	h = middleware.NewCache(h, middleware.CacheOpts{
-		Expiry:        time.Minute,
-		Purge:         5 * time.Minute,
+		Expiry:        10*time.Second,
+		Purge:         time.Minute,
 		IgnoreHeaders: true,
 	})
 	h = middleware.NewStats(h, ctx.Statter())

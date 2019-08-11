@@ -1,0 +1,19 @@
+version: "3"
+
+services:
+  srv1:
+    image: jamesdbloom/mockserver
+    command: -serverPort 1080 -logLevel INFO -jvmOptions "-Dmockserver.initializationJsonPath='/tmp/srv1.json'"
+    volumes:
+      - ./testdata:/tmp
+    ports:
+      - '9080:1080'
+    restart: on-failure
+  srv2:
+    image: jamesdbloom/mockserver
+    command: -serverPort 1080 -logLevel INFO -jvmOptions "-Dmockserver.initializationJsonPath='/tmp/srv2.json'"
+    volumes:
+      - ./testdata:/tmp
+    ports:
+      - '9081:1080'
+    restart: on-failure
