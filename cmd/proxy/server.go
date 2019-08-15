@@ -9,6 +9,7 @@ import (
 	"github.com/hamba/pkg/log"
 	"github.com/nrwiersma/proxy/http"
 	"github.com/nrwiersma/proxy/http/proxy"
+	"github.com/nrwiersma/proxy/http/router"
 	"github.com/nrwiersma/proxy/middleware"
 	"gopkg.in/urfave/cli.v2"
 )
@@ -57,12 +58,22 @@ func newServer(ctx *cmd.Context) (*http.Server, error) {
 		return nil, err
 	}
 	h = proxy.NewRRLoadBalancer(srv1, srv2)
-
 	h = middleware.NewCache(h, middleware.CacheOpts{
 		Expiry:        10*time.Second,
 		Purge:         time.Minute,
 		IgnoreHeaders: true,
 	})
+
+	srv3, err := proxy.New("httpbin.org:80", proxy.Opts{Timeout: time.Second})
+	if err != nil {
+		return nil, err
+	}
+
+	r := &router.Router{}
+	r.AddHandler("/test", h)
+	r.AddHandler("/headers", srv3)
+
+	h = r
 	h = middleware.NewStats(h, ctx.Statter())
 	h = middleware.NewLogger(h, ctx.Logger())
 
