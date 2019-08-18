@@ -41,6 +41,10 @@ func (r *Response) Write(w io.Writer) error {
 			"Content-Type": []string{"text/plain; charset=utf-8"},
 			"Connection":   []string{"close"},
 		}
+
+		if r.Body == nil {
+			r.Header.Set("Content-Length", "0")
+		}
 	}
 
 	// Status Line

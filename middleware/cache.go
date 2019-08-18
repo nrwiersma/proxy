@@ -30,6 +30,7 @@ type Cache struct {
 	ignoreHeaders bool
 }
 
+// CacheOpts configures a cache.
 type CacheOpts struct {
 	Expiry time.Duration
 

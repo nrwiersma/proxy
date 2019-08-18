@@ -13,13 +13,13 @@ func TestResponse_Write(t *testing.T) {
 		StatusCode: 200,
 		StatusText: "OK",
 		Proto:      "HTTP/1.1",
-		Header:     http.Header{
-			"Host": []string{"example.com"},
+		Header: http.Header{
+			"Host":           []string{"example.com"},
 			"Content-Length": []string{"4"},
 		},
-		Body:        bytes.NewReader([]byte("test")),
-		Close:      false,
-		Error:      nil,
+		Body:  bytes.NewReader([]byte("test")),
+		Close: false,
+		Error: nil,
 	}
 
 	buf := bytes.NewBuffer(nil)
@@ -36,11 +36,11 @@ func TestResponse_WriteNoBody(t *testing.T) {
 		StatusCode: 200,
 		StatusText: "OK",
 		Proto:      "HTTP/1.1",
-		Header:     http.Header{
+		Header: http.Header{
 			"Host": []string{"example.com"},
 		},
-		Close:      false,
-		Error:      nil,
+		Close: false,
+		Error: nil,
 	}
 
 	buf := bytes.NewBuffer(nil)

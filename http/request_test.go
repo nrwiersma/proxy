@@ -11,16 +11,16 @@ import (
 
 func TestRequest_Write(t *testing.T) {
 	req := &http.Request{
-		Method:     "GET",
-		URL:        &url.URL{
-			Path:       "/blah",
-			RawPath:    "/blah",
-			RawQuery:   "foo=bar#frag",
+		Method: "GET",
+		URL: &url.URL{
+			Path:     "/blah",
+			RawPath:  "/blah",
+			RawQuery: "foo=bar#frag",
 		},
-		Host:       "example.com",
-		Proto:      "HTTP/1.1",
-		Header:     http.Header{
-			"Host": []string{"example.com"},
+		Host:  "example.com",
+		Proto: "HTTP/1.1",
+		Header: http.Header{
+			"Host":           []string{"example.com"},
 			"Content-Length": []string{"4"},
 		},
 		Body:       bytes.NewReader([]byte("test")),
@@ -39,16 +39,16 @@ func TestRequest_Write(t *testing.T) {
 
 func TestRequest_WriteNoBody(t *testing.T) {
 	req := &http.Request{
-		Method:     "GET",
-		URL:        &url.URL{
-			Path:       "/blah",
-			RawPath:    "/blah",
-			RawQuery:   "foo=bar",
-			Fragment:   "frag",
+		Method: "GET",
+		URL: &url.URL{
+			Path:     "/blah",
+			RawPath:  "/blah",
+			RawQuery: "foo=bar",
+			Fragment: "frag",
 		},
-		Host:       "example.com",
-		Proto:      "HTTP/1.1",
-		Header:     http.Header{
+		Host:  "example.com",
+		Proto: "HTTP/1.1",
+		Header: http.Header{
 			"Host": []string{"example.com"},
 		},
 		RequestURI: "/blah?foo=bar#frag",

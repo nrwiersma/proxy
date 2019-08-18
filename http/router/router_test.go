@@ -110,4 +110,3 @@ func TestRouter_ServeHTTPNotFoundReturns404(t *testing.T) {
 
 	assert.Equal(t, 404, got.StatusCode)
 }
-

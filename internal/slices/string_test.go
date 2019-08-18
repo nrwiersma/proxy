@@ -15,16 +15,16 @@ func TestStringContains(t *testing.T) {
 		want   bool
 	}{
 		{
-			name: "Found",
+			name:   "Found",
 			string: "foo",
-			slice: []string{"foo", "bar"},
-			want: true,
+			slice:  []string{"foo", "bar"},
+			want:   true,
 		},
 		{
-			name: "Not Found",
+			name:   "Not Found",
 			string: "test",
-			slice: []string{"foo", "bar"},
-			want: false,
+			slice:  []string{"foo", "bar"},
+			want:   false,
 		},
 	}
 

@@ -15,7 +15,7 @@ func TestRRLoadBalancer_ServeHTTP(t *testing.T) {
 	h2 := new(MockHandler)
 	h2.On("ServeHTTP", mock.Anything, mock.Anything).Once().Return(nil)
 
-	bal := proxy.NewRRLoadBalancer(h1, h2)
+	bal := proxy.NewRRLoadBalancer([]http.Handler{h1, h2})
 
 	for i := 0; i < 3; i++ {
 		bal.ServeHTTP(context.Background(), nil)

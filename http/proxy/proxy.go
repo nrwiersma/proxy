@@ -101,7 +101,7 @@ func (o Opts) dialTimeout() time.Duration {
 	return time.Second
 }
 
-// NewServer returns a new reverse proxy.
+// New returns a new reverse proxy.
 func New(addr string, opts Opts) (*ReverseProxy, error) {
 	tcpAddr, err := net.ResolveTCPAddr("tcp", addr)
 	if err != nil {

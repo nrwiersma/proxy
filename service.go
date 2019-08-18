@@ -157,7 +157,7 @@ func (s *Service) AddRoute(name string, route Route) error {
 	return nil
 }
 
-// Endpoint represents a service endpoint.
+// Entrypoint represents a service endpoint.
 type Entrypoint struct {
 	Address     string       `yaml:"address"`
 	Certificate *Certificate `yaml:"tls"`
