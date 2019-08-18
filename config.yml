@@ -1,0 +1,46 @@
+server:
+  # Timeouts
+  readTimeout: 30s
+  writeTimeout: 30s
+  idleTimeout: 1s
+  # Options
+  accessLog: true
+
+entrypoints:
+  http:
+    address: ":8080"
+  https:
+    address: ":8443"
+    tls:
+      cert: "./testdata/cert.pem"
+      key: "./testdata/key.pem"
+
+backends:
+  test-server:
+    servers:
+      - "http://127.0.0.1:9080"
+      - "http://127.0.0.1:9081"
+    timeout: 1s
+  header-server:
+    servers:
+      - "http://httpbin.org:80"
+    timeout: 1s
+
+routes:
+  ll-route:
+    pattern: "/test"
+    backend: "test-server"
+    middleware:
+      - type: cache
+        expiry: 10s
+        purge: 1m
+        ignoreHeaders: true
+  header-route:
+    pattern: "/headers"
+    backend: "header-server"
+  host-route:
+    pattern: "proxy.test"
+    backend: "test-server"
+    middleware:
+      - type: location
+        path: "/test"

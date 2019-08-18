@@ -15,9 +15,7 @@ type RRLoadBalancer struct {
 }
 
 // NewRRLoadBalancer returns a round robin load balancer.
-func NewRRLoadBalancer(server http.Handler, servers ...http.Handler) *RRLoadBalancer {
-	srvs := append([]http.Handler{server}, servers...)
-
+func NewRRLoadBalancer(srvs []http.Handler) *RRLoadBalancer {
 	return &RRLoadBalancer{
 		srvs: srvs,
 		pos:  0,

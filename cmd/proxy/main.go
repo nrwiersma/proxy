@@ -11,7 +11,7 @@ import (
 import _ "github.com/joho/godotenv/autoload"
 
 const (
-	flagTemplates = "templates"
+	flagConfig = "config"
 )
 
 var version = "¯\\_(ツ)_/¯"
@@ -21,12 +21,12 @@ var commands = []*cli.Command{
 		Name:  "server",
 		Usage: "Run the reverse proxy",
 		Flags: cmd.Flags{
-			//&cli.StringFlag{
-			//	Name:    flagTemplates,
-			//	Value:   "file:///./templates",
-			//	Usage:   "The URI to the templates. Supported schemes: 'file', 'http', 'https'.",
-			//	EnvVars: []string{"TEMPLATES"},
-			//},
+			&cli.StringFlag{
+				Name:    flagConfig + ",c",
+				Value:   "./config.yml",
+				Usage:   "The proxy configuration file.",
+				EnvVars: []string{"CONFIG"},
+			},
 		}.Merge(cmd.CommonFlags, cmd.ServerFlags),
 		Action: runServer,
 	},
